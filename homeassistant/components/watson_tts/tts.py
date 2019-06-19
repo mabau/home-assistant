@@ -16,6 +16,7 @@ DEFAULT_URL = 'https://stream.watsonplatform.net/text-to-speech/api'
 
 CONF_VOICE = 'voice'
 CONF_OUTPUT_FORMAT = 'output_format'
+CONF_OUTPUT_AUDIO_RATE = 'output_audio_rate'
 CONF_TEXT_TYPE = 'text'
 
 # List from https://tinyurl.com/watson-tts-docs
@@ -65,12 +66,14 @@ CONTENT_TYPE_EXTENSIONS = {
 DEFAULT_VOICE = 'en-US_AllisonVoice'
 DEFAULT_OUTPUT_FORMAT = 'audio/mp3'
 
+
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_URL, default=DEFAULT_URL): cv.string,
     vol.Required(CONF_APIKEY): cv.string,
     vol.Optional(CONF_VOICE, default=DEFAULT_VOICE): vol.In(SUPPORTED_VOICES),
     vol.Optional(CONF_OUTPUT_FORMAT, default=DEFAULT_OUTPUT_FORMAT):
         vol.In(SUPPORTED_OUTPUT_FORMATS),
+    vol.Optional(CONF_OUTPUT_AUDIO_RATE): cv.positive_int,
 })
 
 
@@ -86,9 +89,11 @@ def get_engine(hass, config):
     supported_languages = list({s[:5] for s in SUPPORTED_VOICES})
     default_voice = config[CONF_VOICE]
     output_format = config[CONF_OUTPUT_FORMAT]
+    output_audio_rate = config.get(CONF_OUTPUT_AUDIO_RATE, None)
 
     return WatsonTTSProvider(
-        service, supported_languages, default_voice, output_format)
+        service, supported_languages, default_voice,
+        output_format, output_audio_rate)
 
 
 class WatsonTTSProvider(Provider):
@@ -98,13 +103,15 @@ class WatsonTTSProvider(Provider):
                  service,
                  supported_languages,
                  default_voice,
-                 output_format):
+                 output_format,
+                 output_audio_rate):
         """Initialize Watson TTS provider."""
         self.service = service
         self.supported_langs = supported_languages
         self.default_lang = default_voice[:5]
         self.default_voice = default_voice
         self.output_format = output_format
+        self.output_audio_rate = output_audio_rate
         self.name = 'Watson TTS'
 
     @property
@@ -129,8 +136,12 @@ class WatsonTTSProvider(Provider):
 
     def get_tts_audio(self, message, language=None, options=None):
         """Request TTS file from Watson TTS."""
+        output_format = self.output_format
+        if self.output_audio_rate:
+            output_format += f";rate={self.output_audio_rate}"
+
         response = self.service.synthesize(
-            message, accept=self.output_format,
+            message, accept=output_format,
             voice=self.default_voice).get_result()
 
         return (CONTENT_TYPE_EXTENSIONS[self.output_format],
